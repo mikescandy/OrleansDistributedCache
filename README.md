@@ -13,7 +13,7 @@ Microsoft Orleans has been deployed in our production environment for a few mont
 We want to use Orleans as a distributed cache for our time sensitive operations, and eventually replace Redis with it. Orleans has two key advantages:
 
 - Being able to execute code, we only need one system to populate the cache and keep it up to date
-- We managecan easily manage how it scales, by simply provisioning more containers. The internal logic of Orleans will automatically distribute the load across the new containers.
+- We can easily manage how it scales, by simply provisioning more containers. The internal logic of Orleans will automatically distribute the load across the new containers.
 
 We decided to start using it as a distributed cache and eventually replace Redis. , and we had to make sure the performance profile would be adequate for the email risk score api, where we have strict SLA requirements around response time.
 
