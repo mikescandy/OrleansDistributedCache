@@ -15,7 +15,7 @@ We want to use Orleans as a distributed cache for our time sensitive operations,
 - Being able to execute code, we only need one system to populate the cache and keep it up to date
 - We can easily manage how it scales, by simply provisioning more containers. The internal logic of Orleans will automatically distribute the load across the new containers.
 
-We decided to start using it as a distributed cache and eventually replace Redis. , and we had to make sure the performance profile would be adequate for the email risk score api, where we have strict SLA requirements around response time.
+Before starting using it we had to make sure the performance profile would be adequate for the email risk score api, where we have strict SLA requirements around response time.
 
 In the current implementation, the cache backend is a traditional Redis cache, with a standalone service that periodically loads data from SqlServer and updates the cache. When loading data from Redis, the response time is typically between 2ms and 5ms. Therefore, in order to be a viable solution, our Orleans realtime cache should have similar or better performance.
 
