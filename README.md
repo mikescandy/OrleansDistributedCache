@@ -8,9 +8,14 @@
 
 ## Introduction
 
-Microsoft Orleans has been deployed in our production environment for x months, but until now it was used for non time sensitive operations.
+Microsoft Orleans has been deployed in our production environment for a few months, but until now it was used for non time sensitive operations.
 
-We decided to start using it as a distributed cache, and we had to make sure the performance profile would be adequate for the email risk score api, where we have strict SLA requirements around response time.
+We want to use Orleans as a distributed cache for our time sensitive operations, and eventually replace Redis with it. Orleans has two key advantages:
+
+- Being able to execute code, we only need one system to populate the cache and keep it up to date
+- We managecan easily manage how it scales, by simply provisioning more containers. The internal logic of Orleans will automatically distribute the load across the new containers.
+
+We decided to start using it as a distributed cache and eventually replace Redis. , and we had to make sure the performance profile would be adequate for the email risk score api, where we have strict SLA requirements around response time.
 
 In the current implementation, the cache backend is a traditional Redis cache, with a standalone service that periodically loads data from SqlServer and updates the cache. When loading data from Redis, the response time is typically between 2ms and 5ms. Therefore, in order to be a viable solution, our Orleans realtime cache should have similar or better performance.
 
@@ -25,7 +30,7 @@ The first entity we decided to cache was the Client entity. The Client grain imp
     }
 ```
 
-The cache backend run in Orleans itself, and it's implemented as a singleton service. It consists of a simple key-value store, and is updated periodically in the background.
+The cache backend runs in Orleans itself, and it's implemented as a singleton service. It consists of a simple key-value store, and is updated periodically in the background.
 
 ```csharp
     public interface IClientService
@@ -45,7 +50,7 @@ The overall implementation is simple and straightforward. It's the kind of code 
 
 Orleans is a distributed system, and it's hard to measure the performance of a distributed system.
 
-Our approach consisted in a production deployment, hidden behind a feature flag. The call to retrieve data from the Orleans silo would be executed only in specific conditions.
+Our approach consisted of a production deployment, hidden behind a feature flag. The call to retrieve data from the Orleans silo would be executed only in specific conditions.
 This allowed us to understand how the system performed in real world conditions without affecting our customers.
 
 The call duration is measured using a [GrainFilter](https://dotnet.github.io/orleans/docs/grains/interceptors.html), which is a filter that is applied to the grain calls. It works in the same way as a middleware in an ASP.NET pipeline, and can be executed on the client or on the server. We focused more on the client side, because it's the one that is most likely to affect the performance.
@@ -91,7 +96,10 @@ This is often correlated with long Garbage Collection pauses, which indicated a 
 
 The Orleans cluster was scaling out to more than 100 containers, which should have been more than enough to handle our traffic volume, but was still struggling.
 
-Our approach was to scale up the containers (from 256mb to 1gb of ram) and scale in the deployment (down to a minimum of 4 containers). This removed memory pressure from the Orleans cluster which started to perform well, handling the same production traffic as before, but with way better metrics and overall less resources.
+Our approach was to scale up the containers (from 256mb to 1gb of ram) and scale in the deployment (down to a minimum of 4 containers). The rationale behind this decision was that, because of the high memory load which was causing frequent GC pauses, the Orleans silos were not capable of coordinating with each other. The delay in sending and receiving messages between silos was leading the silos to think that there was an issue, which eventually was causing silos to shut down. But at the same time, the high memory load was triggering our auto scaling policy, which kept on deploying more containers, increasing the amount of traffic and causing more GC pauses.
+
+Increasing the available memory for the containers removed pressure from the Orleans cluster which started to perform well, handling the same production traffic as before, but with way better metrics and overall less resources.
+
 After this change, we went back to look at the performance of the realtime calls, which now showed a better profile: latency went down, and the hedged calls showed remarkable stability.
 If we look back at image 1 and 2, we can see when we deployed in production the new container configuration (Feb 25th).
 
@@ -99,12 +107,16 @@ If we look back at image 1 and 2, we can see when we deployed in production the 
 
 Having great monitoring tools in place was key to understanding the performance of the Orleans cluster. The combination of metrics, logs and traces allowed us to understand the behavior of the system, and tools like Datadog and Splunk were able to provide insights into the system. Especially usuful was the ability to visualize and correlate different metrics at the same time.
 
-This will be the base of our future work: understaing the key metrics of the Orleans cluster will allow us to build a reliable alerting system that will be able to react to performance issues and possibly anticipate them.
+|           ![Orleans dashboard](/img/6.png)           |
+| :--------------------------------------------------: |
+| <b>Img.3 - One of our Orleans Datadog dashboards</b> |
+
+This will be the base of our future work: understanding the key metrics of the Orleans cluster will allow us to build a reliable alerting system that will be able to react to performance issues and possibly anticipate them.
 
 While investigating the memory issue, we learned about modern dotnet performance analysis tools. Commands like dotnet-counter, dotnet-dump and dotnet-trace are great tools to understand the behavior of a dotnet application, although the learning curve is high. [This MSDN guide](https://docs.microsoft.com/en-us/dotnet/core/diagnostics/debug-memory-leak) is a good starting point.
 
 |          ![Dotnet counters](/img/4.png)           |
 | :-----------------------------------------------: |
-| <b>Img.3 - A sample output of dotnet-counters</b> |
+| <b>Img.4 - A sample output of dotnet-counters</b> |
 
 For more in depth analysis, tools like dotMemory are great, but they are only available on Windows.
